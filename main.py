@@ -1,33 +1,35 @@
 import discord
 import json
-from discord.ext import commands
-from discord.ext.commands.errors import BadArgument
-from discord.ext.commands.help import MinimalHelpCommand
+import os
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from os import getenv
 load_dotenv()
 
 def DeadMan(file, data):
-    if data == {}:
-        courses = data['courses'] = []
-    else:
-        courses = data['courses']
 
-    bot = commands.Bot(command_prefix='-', activity = discord.Activity(type = discord.ActivityType.custom) , status = discord.Status.idle, help_command=MinimalHelpCommand())
+    bot = commands.Bot(command_prefix='-', activity = discord.Activity(type = discord.ActivityType.watching, name = "Deadlines!"))
 
     @bot.event
     async def on_ready():
         print("We have logged in as:", bot.user.name, '#{}'.format(bot.user.discriminator))
 
-    @bot.command()
+    # setting up empty database
+    if data == {}:
+        courses = data['courses'] = []
+    else:
+        courses = data['courses']
+
+    @bot.command(description = "Replies the user with hello")
     async def hello(ctx):
+
         await ctx.reply("Hello mate!")
 
-    @bot.command(name='add')
-    async def add_deadline(ctx, course:str = None, date:int = None, *, desc:str = None):
-        if (course == None or date == None or desc == None):
-            await ctx.reply("Usage: -add <Course Name> <Deadline Date in DDMM> <Deadline Description>")
+    @bot.command(name='add', description = "Adds a deadline.")
+    async def add_deadline(ctx, course:str = None, ddmm_date:int = None, *, description:str = None):
+        if (course == None or ddmm_date == None or description == None or len(str(ddmm_date)) != 4):
+            await ctx.reply("Usage: -add <Course> <Deadline in DDMM> <Description>")
             return
+
         try:
             if course not in courses:
                 data[course] = {}
@@ -37,8 +39,8 @@ def DeadMan(file, data):
 
             deadline = {}
             deadline_ID = data[course]['course_id'] + str(data[course]['count'])
-            deadline['Date'] = date
-            deadline['Description'] = desc
+            deadline['Date'] = ddmm_date
+            deadline['Description'] = description
             data[course][deadline_ID] = deadline
 
             data[course]['count'] += 1
@@ -56,46 +58,48 @@ def DeadMan(file, data):
             await ctx.reply(e)
 
     @add_deadline.error
-    async def bad_argument(ctx, error):
+    async def _bad_argument(ctx, error):
         if isinstance(error, commands.BadArgument):
-            await ctx.send("Wrong argument passed!\nUsage: -add <Course Name> <Deadline Date in DDMM> <Deadline Description>")
+            await ctx.send("Wrong argument passed!\nUsage: -add <Course> <Deadline in DDMM> <Description>")
 
-    # @bot.command(name='courses')
-    # async def list_courses(ctx):
-    #     try:
-    #         course_list = '**The courses added so far are:**\n>>> '
-    #         for course in courses:
-    #             course_list += course + '\n'
-    #         await ctx.send(course_list)
-    #     except Exception as e:
-    #         await ctx.reply(e)
+    @bot.command(name='courses', description = "Lists all the courses for which deadlines have been added.")
+    async def list_courses(ctx):
+        try:
+            course_list = discord.Embed(title = "All courses", description = "Listing all courses for which deadlines have been added", color = discord.Color.blue())
+            for course in courses:
+                course_list.add_field(name = f'{course}', value = f'{data[course]["count"]} deadlines', inline = False)
+            await ctx.send(embed = course_list)
 
-    @bot.command(name='listall')
+        except Exception as e:
+            await ctx.reply(e)
+
+    @bot.command(name='listall', description = "Lists all the deadlies that have been added so far")
     async def list_deadlines(ctx):
         try:
-            all_list = '**Deadlines for all courses:**\n'
+            all_list = discord.Embed(title = "All deadlines", description = "Listing all deadlines have been added", color = discord.Color.blue())
             for course in courses:
-                course_list = '`{}:`\n'.format(course)
+                course_list = ''
+                counter = 0
                 for dl in data[course]:
                     if(dl == "course_id" or dl == "count"):
                         continue
                     else:
-                        course_list += '> '
-                        course_list += str(data[course][dl]["Date"] // 100) + '/' + (str(data[course][dl]["Date"] % 100))
-                        course_list += ': ' + data[course][dl]["Description"] + '\n'
-                all_list += course_list
-            await ctx.send(all_list)
+                        counter += 1
+                        course_list += f'{counter}. '
+                        course_list += f'`{(data[course][dl]["Date"] // 100)}/{data[course][dl]["Date"] % 100}`'
+                        course_list += f': {data[course][dl]["Description"]}\n'
+                all_list.add_field(name = f'{course}', value = course_list, inline = False)
+            await ctx.send(embed = all_list)
+
         except Exception as e:
             await ctx.reply(e)
 
-    # @bot.command(name='help')
-    # async def _help(ctx):
-    #     pass
-
-    bot.run(getenv('TOKEN'))
+    bot.run(os.getenv('TOKEN'))
 
 def main():
-    file = getenv('FILE')
+
+    # using json file as temporary database
+    file = os.getenv('FILE')
     with open(file) as f:
         try:
             data = json.load(f)

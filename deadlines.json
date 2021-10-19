@@ -1,0 +1,13 @@
+{
+    "courses": [
+        "MAN205"
+    ],
+    "MAN205": {
+        "course_id": "0",
+        "count": 1,
+        "00": {
+            "Date": 2510,
+            "Description": "Project"
+        }
+    }
+}
